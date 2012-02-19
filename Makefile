@@ -18,7 +18,7 @@ CFLAGS += -std=c99 $(CFLAGSADD)
 LDFLAGS ?= -L$(CUSTOMLIBPNG) -L$(CUSTOMZLIB) -L/usr/local/lib/ -L/usr/lib/ -L/usr/X11/lib/
 LDFLAGS += -lz -lpng -lm $(LDFLAGSADD)
 
-OBJS = pngquant.o rwpng.o pam.o mediancut.o blur.o mempool.o viter.o nearest.o
+OBJS = pngquant.o rwpng.o pam.o mediancut.o blur.o mempool.o viter.o nearest.o wu.o
 
 all: $(BIN)
 

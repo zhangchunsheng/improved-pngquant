@@ -53,6 +53,7 @@
 #include "rwpng.h"  /* typedefs, common macros, public prototypes */
 #include "pam.h"
 #include "mediancut.h"
+#include "wu.h"
 #include "nearest.h"
 #include "blur.h"
 #include "viter.h"
@@ -894,7 +895,7 @@ static colormap *find_best_palette(histogram *hist, const int reqcolors, const f
     {
         verbose_printf("  selecting colors");
 
-        colormap *newmap = mediancut(hist, min_opaque_val, reqcolors);
+        colormap *newmap = wucut(hist, min_opaque_val, reqcolors);
         if (newmap->subset_palette) {
             // nearest_search() needs subset palette to accelerate the search, I presume that
             // palette starting with most popular colors will improve search speed
