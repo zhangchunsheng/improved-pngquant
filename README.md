@@ -1,6 +1,6 @@
-#pngquant
+#pngquant 2
 
-This is the official new `pngquant`.
+This is the official `pngquant` and `libimagequant`.
 
 [pngquant](http://pngquant.org) converts 24/32-bit RGBA PNGs to 8-bit palette with *alpha channel preserved*.
 Such images are compatible with all modern browsers, and a special compatibility setting exists which helps transparency degrade well in Internet Explorer 6.
@@ -11,13 +11,14 @@ This utility works on Linux, Mac OS X and Windows.
 
 ##Usage
 
-- batch conversion of multiple files: `pngquant 256 *.png`
-- Unix-style stdin/stdout chaining: `… | pngquant 16 | …`
+- batch conversion of multiple files: `pngquant *.png`
+- Unix-style stdin/stdout chaining: `… | pngquant - | …`
 
-To further reduce file size, you may want to consider [optipng](http://optipng.sourceforge.net) or [ImageOptim](http://imageoptim.pornel.net).
-
+To further reduce file size, try [optipng](http://optipng.sourceforge.net) or [ImageOptim](http://imageoptim.pornel.net).
 
 ##Improvements since 1.0
+
+Generated files are both smaller and look much better.
 
 * Significantly better quality of quantisation
 
@@ -38,8 +39,9 @@ To further reduce file size, you may want to consider [optipng](http://optipng.s
 
   - C99 with no workarounds for old systems
   - floating-point math used throughout
-  - Intel SSE3 optimisations
+  - Intel SSE optimisations
   - multicore support via OpenMP
+  - quantization moved to standalone libimagequant
 
 ##Options
 
@@ -53,15 +55,31 @@ See `pngquant -h` for full list.
 
 ###`--ext new.png`
 
-Set custom extension (suffix) for output filename. By default `-or8.png` or `-fs8.png` is used. If you use `-ext .png -force` options pngquant will overwrite input files in place (use with caution).
+Set custom extension (suffix) for output filename. By default `-or8.png` or `-fs8.png` is used. If you use `--ext=.png --force` options pngquant will overwrite input files in place (use with caution).
+
+###`-o out.png` or `--output out.png`
+
+Writes converted file to the given path. When this option is used only single input file is allowed.
+
+###`--skip-if-larger`
+
+Don't write converted files if the conversion isn't worth it.
 
 ###`--speed N`
 
-Speed/quality trade-off from 1 (brute-force) to 10 (fastest). The default is 3. Speed 10 has 5% lower quality, but is 8 times faster than the default.
+Speed/quality trade-off from 1 (brute-force) to 11 (fastest). The default is 3. Speed 10 has 5% lower quality, but is 8 times faster than the default. Speed 11 disables dithering and lowers compression level.
 
-###`--iebug`
+###`--nofs`
 
-Workaround for IE6, which only displays fully opaque pixels. pngquant will make almost-opaque pixels fully opaque and will avoid creating new transparent colors.
+Disables Floyd-Steinberg dithering.
+
+###`--floyd=0.5`
+
+Controls level of dithering (0 = none, 1 = full).
+
+###`--posterize bits`
+
+Reduce precision of the palette by number of bits. Use when the image will be displayed on low-depth screens (e.g. 16-bit displays or compressed textures).
 
 ###`--version`
 

@@ -10,11 +10,12 @@
 #import <Cocoa/Cocoa.h>
 #import <CoreGraphics/CoreGraphics.h>
 #include <stdio.h>
-#include "pam.h"
+#include "lib/libimagequant.h"
+#include "lib/pam.h"
 
 int rwpng_read_image24_cocoa(FILE *fp, png24_image *out)
 {
-    rgb_pixel *pixel_data;
+    rgba_pixel *pixel_data;
     int width, height;
     @autoreleasepool {
         NSFileHandle *fh = [[NSFileHandle alloc] initWithFileDescriptor:fileno(fp)];
@@ -38,17 +39,18 @@ int rwpng_read_image24_cocoa(FILE *fp, png24_image *out)
                                                      colorspace,
                                                      kCGImageAlphaPremultipliedLast);
 
+        CGColorSpaceRelease(colorspace);
+
         if (!context) return READ_ERROR;
 
         CGContextDrawImage(context, CGRectMake(0.0, 0.0, width, height), image);
         CGContextRelease(context);
-        CGColorSpaceRelease(colorspace);
     }
     // reverse premultiplication
 
     for(int i=0; i < width*height; i++) {
         if (pixel_data[i].a) {
-            pixel_data[i] = (rgb_pixel){
+            pixel_data[i] = (rgba_pixel){
                 .a = pixel_data[i].a,
                 .r = pixel_data[i].r*255/pixel_data[i].a,
                 .g = pixel_data[i].g*255/pixel_data[i].a,

@@ -1,8 +1,9 @@
-/**
+/* pam.h - pam (portable alpha map) utility library
+ **
+ ** Colormap routines.
+ **
  ** Copyright (C) 1989, 1991 by Jef Poskanzer.
- ** Copyright (C) 1997, 2000, 2002 by Greg Roelofs; based on an idea by
- **                                Stefan Schneider.
- ** (C) 2011 by Kornel Lesinski.
+ ** Copyright (C) 1997 by Greg Roelofs.
  **
  ** Permission to use, copy, modify, and distribute this software and its
  ** documentation for any purpose and without fee is hereby granted, provided
@@ -11,11 +12,13 @@
  ** documentation.  This software is provided "as is" without express or
  ** implied warranty.
  */
+
 #ifndef PAM_H
 #define PAM_H
 
 #include <math.h>
 #include <assert.h>
+#include <stdlib.h>
 #include <stdbool.h>
 
 #ifndef MAX
@@ -25,9 +28,8 @@
 
 #define MAX_DIFF 1e20
 
-// it's safe to assume that 64-bit x86 has SSE2.
 #ifndef USE_SSE
-#  if defined(__SSE2__) && (defined(__x86_64__) || defined(__amd64))
+#  if defined(__SSE__) && (defined(WIN32) || defined(__WIN32__))
 #    define USE_SSE 1
 #  else
 #    define USE_SSE 0
@@ -35,26 +37,49 @@
 #endif
 
 #if USE_SSE
-#include <emmintrin.h>
-#define SSE_ALIGN __attribute__ ((aligned (16)))
-#define cpuid(func,ax,bx,cx,dx)\
-    __asm__ __volatile__ ("cpuid":\
-    "=a" (ax), "=b" (bx), "=c" (cx), "=d" (dx) : "a" (func));
+#  include <xmmintrin.h>
+#  ifdef _MSC_VER
+#    include <intrin.h>
+#    define SSE_ALIGN
+#  else
+#    define SSE_ALIGN __attribute__ ((aligned (16)))
+#    if defined(__i386__) && defined(__PIC__)
+#       define cpuid(func,ax,bx,cx,dx)\
+        __asm__ __volatile__ ( \
+        "push %%ebx\n" \
+        "cpuid\n" \
+        "mov %%ebx, %1\n" \
+        "pop %%ebx\n" \
+        : "=a" (ax), "=r" (bx), "=c" (cx), "=d" (dx) \
+        : "a" (func));
+#    else
+#       define cpuid(func,ax,bx,cx,dx)\
+        __asm__ __volatile__ ("cpuid":\
+        "=a" (ax), "=b" (bx), "=c" (cx), "=d" (dx) : "a" (func));
+#    endif
+#endif
 #else
-#define SSE_ALIGN
+#  define SSE_ALIGN
 #endif
 
 #if defined(__GNUC__) || defined (__llvm__)
-#define ALWAYS_INLINE __attribute__((always_inline))
+#define ALWAYS_INLINE __attribute__((always_inline)) inline
+#define NEVER_INLINE __attribute__ ((noinline))
+#elif defined(_MSC_VER)
+#define inline __inline
+#define restrict __restrict
+#define ALWAYS_INLINE __forceinline
+#define NEVER_INLINE __declspec(noinline)
 #else
-#define ALWAYS_INLINE
+#define ALWAYS_INLINE inline
+#define NEVER_INLINE
 #endif
 
 /* from pam.h */
 
 typedef struct {
     unsigned char r, g, b, a;
-} rgb_pixel;
+} rgba_pixel;
 
 typedef struct {
     float a, r, g, b;
@@ -62,15 +87,14 @@ typedef struct {
 
 static const double internal_gamma = 0.5499;
 
-extern float gamma_lut[256];
-void to_f_set_gamma(double gamma);
+LIQ_PRIVATE void to_f_set_gamma(float gamma_lut[], const double gamma);
 
 /**
  Converts 8-bit color to internal gamma and premultiplied alpha.
  (premultiplied color space is much better for blending of semitransparent colors)
  */
-inline static f_pixel to_f(rgb_pixel px) ALWAYS_INLINE;
-inline static f_pixel to_f(rgb_pixel px)
+ALWAYS_INLINE static f_pixel to_f(const float gamma_lut[], const rgba_pixel px);
+inline static f_pixel to_f(const float gamma_lut[], const rgba_pixel px)
 {
     float a = px.a/255.f;
 
@@ -82,10 +106,10 @@ inline static f_pixel to_f(rgb_pixel px)
     };
 }
 
-inline static rgb_pixel to_rgb(float gamma, f_pixel px)
+inline static rgba_pixel to_rgb(const float gamma, const f_pixel px)
 {
     if (px.a < 1.f/256.f) {
-        return (rgb_pixel){0,0,0,0};
+        return (rgba_pixel){0,0,0,0};
     }
 
     float r = px.r / px.a,
@@ -103,7 +127,7 @@ inline static rgb_pixel to_rgb(float gamma, f_pixel px)
     b *= 256.f;
     a *= 256.f;
 
-    return (rgb_pixel){
+    return (rgba_pixel){
         .r = r>=255.f ? 255 : r,
         .g = g>=255.f ? 255 : g,
         .b = b>=255.f ? 255 : b,
@@ -111,7 +135,7 @@ inline static rgb_pixel to_rgb(float gamma, f_pixel px)
     };
 }
 
-inline static double colordifference_ch(const double x, const double y, const double alphas) ALWAYS_INLINE;
+ALWAYS_INLINE static double colordifference_ch(const double x, const double y, const double alphas);
 inline static double colordifference_ch(const double x, const double y, const double alphas)
 {
     // maximum of channel blended on white, and blended on black
@@ -120,24 +144,37 @@ inline static double colordifference_ch(const double x, const double y, const do
     return black*black + white*white;
 }
 
-inline static float colordifference_stdc(const f_pixel px, const f_pixel py) ALWAYS_INLINE;
+ALWAYS_INLINE static float colordifference_stdc(const f_pixel px, const f_pixel py);
 inline static float colordifference_stdc(const f_pixel px, const f_pixel py)
 {
+    // px_b.rgb = px.rgb + 0*(1-px.a) // blend px on black
+    // px_b.a   = px.a   + 1*(1-px.a)
+    // px_w.rgb = px.rgb + 1*(1-px.a) // blend px on white
+    // px_w.a   = px.a   + 1*(1-px.a)
+
+    // px_b.rgb = px.rgb              // difference same as in opaque RGB
+    // px_b.a   = 1
+    // px_w.rgb = px.rgb - px.a       // difference simplifies to formula below
+    // px_w.a   = 1
+
+    // (px.rgb - px.a) - (py.rgb - py.a)
+    // (px.rgb - py.rgb) + (py.a - px.a)
+
     const double alphas = py.a-px.a;
     return colordifference_ch(px.r, py.r, alphas) +
            colordifference_ch(px.g, py.g, alphas) +
            colordifference_ch(px.b, py.b, alphas);
 }
 
-inline static double min_colordifference_ch(const double x, const double y, const double alphas) ALWAYS_INLINE;
+ALWAYS_INLINE static double min_colordifference_ch(const double x, const double y, const double alphas);
 inline static double min_colordifference_ch(const double x, const double y, const double alphas)
 {
     const double black = x-y, white = black+alphas;
-    return MIN(black*black , white*white);
+    return MIN(black*black , white*white) * 2.f;
 }
 
 /* least possible difference between colors (difference varies depending on background they're blended on) */
-inline static float min_colordifference(const f_pixel px, const f_pixel py) ALWAYS_INLINE;
+ALWAYS_INLINE static float min_colordifference(const f_pixel px, const f_pixel py);
 inline static float min_colordifference(const f_pixel px, const f_pixel py)
 {
     const double alphas = py.a-px.a;
@@ -146,7 +183,7 @@ inline static float min_colordifference(const f_pixel px, const f_pixel py)
            min_colordifference_ch(px.b, py.b, alphas);
 }
 
-inline static float colordifference(f_pixel px, f_pixel py) ALWAYS_INLINE;
+ALWAYS_INLINE static float colordifference(f_pixel px, f_pixel py);
 inline static float colordifference(f_pixel px, f_pixel py)
 {
 #if USE_SSE
@@ -179,7 +216,7 @@ inline static float colordifference(f_pixel px, f_pixel py)
 
 /* from pamcmap.h */
 union rgba_as_int {
-    rgb_pixel rgb;
+    rgba_pixel rgba;
     unsigned int l;
 };
 
@@ -189,13 +226,18 @@ typedef struct {
           perceptual_weight; // number of pixels weighted by importance of different areas of the picture
 
     float color_weight;      // these two change every time histogram subset is sorted
-    unsigned int sort_value;
+    union {
+        unsigned int sort_value;
+        unsigned char likely_colormap_index;
+    } tmp;
 } hist_item;
 
 typedef struct {
     hist_item *achv;
+    void (*free)(void*);
     double total_perceptual_weight;
     unsigned int size;
+    unsigned int ignorebits;
 } histogram;
 
 typedef struct {
@@ -204,10 +246,11 @@ typedef struct {
 } colormap_item;
 
 typedef struct colormap {
-    colormap_item *palette;
-    struct colormap *subset_palette;
     unsigned int colors;
-    double palette_error;
+    void* (*malloc)(size_t);
+    void (*free)(void*);
+    struct colormap *subset_palette;
+    colormap_item palette[];
 } colormap;
 
 struct acolorhist_arr_item {
@@ -217,30 +260,31 @@ struct acolorhist_arr_item {
 
 struct acolorhist_arr_head {
     unsigned int used, capacity;
-    struct acolorhist_arr_item *other_items;
     struct {
         union rgba_as_int color;
         float perceptual_weight;
     } inline1, inline2;
+    struct acolorhist_arr_item *other_items;
 };
 
 struct acolorhash_table {
     struct mempool *mempool;
-    struct acolorhist_arr_head *buckets;
-    unsigned int ignorebits, maxcolors, colors;
-    struct acolorhist_arr_item *freestack[512];
-    unsigned int freestackp;
+    unsigned int ignorebits, maxcolors, colors, cols, rows;
     unsigned int hash_size;
+    unsigned int freestackp;
+    struct acolorhist_arr_item *freestack[512];
+    struct acolorhist_arr_head buckets[];
 };
 
-void pam_freeacolorhash(struct acolorhash_table *acht);
-struct acolorhash_table *pam_allocacolorhash(unsigned int maxcolors, unsigned int image_surface, unsigned int ignorebits);
-histogram *pam_acolorhashtoacolorhist(const struct acolorhash_table *acht, const double gamma);
-bool pam_computeacolorhash(struct acolorhash_table *acht, const rgb_pixel*const* apixels, unsigned int cols, unsigned int rows, const float *importance_map);
+LIQ_PRIVATE void pam_freeacolorhash(struct acolorhash_table *acht);
+LIQ_PRIVATE struct acolorhash_table *pam_allocacolorhash(unsigned int maxcolors, unsigned int surface, unsigned int ignorebits, void* (*malloc)(size_t), void (*free)(void*));
+LIQ_PRIVATE histogram *pam_acolorhashtoacolorhist(const struct acolorhash_table *acht, const double gamma, void* (*malloc)(size_t), void (*free)(void*));
+LIQ_PRIVATE bool pam_computeacolorhash(struct acolorhash_table *acht, const rgba_pixel *const pixels[], unsigned int cols, unsigned int rows, const unsigned char *importance_map);
 
-void pam_freeacolorhist(histogram *h);
+LIQ_PRIVATE void pam_freeacolorhist(histogram *h);
 
-colormap *pam_colormap(unsigned int colors);
-void pam_freecolormap(colormap *c);
+LIQ_PRIVATE colormap *pam_colormap(unsigned int colors, void* (*malloc)(size_t), void (*free)(void*));
+LIQ_PRIVATE colormap *pam_duplicate_colormap(colormap *map);
+LIQ_PRIVATE void pam_freecolormap(colormap *c);
 
 #endif

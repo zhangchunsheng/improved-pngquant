@@ -28,6 +28,8 @@ The default behavior if the output file exists is to skip the conversion; use
 to overwrite.
 .Sh OPTIONS
 .Bl -tag -width -indent
+.It Fl o Ar out.png , Fl Fl output Ar out.png
+Writes converted file to the given path. When this option is used only single input file is allowed.
 .It Fl Fl ext Ar new.png
 File extension (suffix) to use for output files instead of the default
 .Ql -fs8.png
@@ -42,18 +44,23 @@ Overwrite existing output files.
 .Dc
 can be used to convert files in place (which is unsafe).
 .It Fl Fl nofs , Fl Fl ordered
-Disable Floyd-Steinberg dithering. It's enabled by default
-.Pq Fl Fl floyd .
+Disable Floyd-Steinberg dithering.
+.It Fl Fl floyd Op Ar =N
+Set dithering level using fractional number between
+.Cm 0
+(none) and
+.Cm 1
+(full, the default).
 .It Fl s Ar N , Fl Fl speed Ar N
 .Cm 1
 (brute-force) to
-.Cm 10
+.Cm 11
 (fastest). The default is
 .Cm 3 .
 Speed
 .Cm 10
-has 5% lower quality, but is about 8 times faster than the default.
-.It Fl q Ar min-max , Fl Fl quality Ar min-max
+has 5% lower quality, but is about 8 times faster than the default. Speed 11 disables dithering and lowers compression level.
+.It Fl Q Ar min-max , Fl Fl quality Ar min-max
 .Va min
 and
 .Va max
@@ -69,6 +76,12 @@ quality. If conversion results in quality below the
 .Va min
 quality the image won't be saved (or if outputting to stdin, 24-bit original will be output) and pngquant will exit with status code
 .Er 99 .
+.It Fl Fl skip-if-larger
+If conversion results in a file larger than the original the image won't be saved and pngquant will exit with status code
+.Er 98 .
+Additionally, file size gain must be greater than the amount of quality lost.
+.It Fl Fl posterize Ar bits
+Truncate number of least significant bits of color (per channel). Use this when image will be output on low-depth displays (e.g. 16-bit RGB).
 .It Fl Fl iebug
 Workaround for Internet Explorer 6, which only displays fully opaque pixels.
 .Nm

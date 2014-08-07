@@ -1,3 +1,29 @@
+version 2.3
+-----------
+ - added ./configure script for better support of Intel C compiler and dependencies [thanks to pdknsk]
+ - tweaked quality metric to better estimate quality of images with large solid backgrounds [thanks to Rolf Timmermans]
+
+version 2.2
+-----------
+ - preserving of unknown PNG chunks (enables optimized Android 9-patch images)
+ - improved color profile support: cHRM & gAMA as alternative to ICC profiles, OpenMP acceleration
+ - improved support for Intel C Compiler, speedup in 32-bit GCC, and some workarounds for Visual Studio's incomplete C support
+
+version 2.1
+-----------
+ - option to save files only if they're compressed better than the original
+ - option to generate posterized output (for use with 16-bit textures)
+ - support for ICC profiles via Little CMS library
+
+version 2.0
+-----------
+ - refactored codebase into pngquant and standalone libimagequant
+ - reduced memory usage by further 30% (and more for very large images)
+ - less precise remapping improving speed by 25% in higher speed settings
+ - --output option for writing converted file under the given path
+ - light dithering with --floyd=0.5
+ - fixed regression in dithering of alpha channel
+
 version 1.8
 -----------
  - min/max quality option (number of colors is automatically adjusted for desired quality level)
@@ -5,6 +31,7 @@ version 1.8
  - significantly improved performance thanks to custom partial sorting
  - optional Cocoa (Mac OS X) image reader for color profile support
  - reduced memory usage by 20%
+ - remapping improved for very low number of colors
 
 version 1.7
 -----------

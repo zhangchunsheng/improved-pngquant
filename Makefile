@@ -1,74 +1,69 @@
-# Makefile for pngquant
-VERSION = $(shell grep 'define PNGQUANT_VERSION' pngquant.c | egrep -Eo '1\.[0-9.]*')
-
-# This changes default "cc" to "gcc", but still allows customization of the CC variable
-# if this line causes problems with non-GNU make, just remove it:
-CC := $(patsubst cc,gcc,$(CC))
+-include config.mk
 
 BIN ?= pngquant
-PREFIX ?= /usr/local
 BINPREFIX = $(PREFIX)/bin
 
-# Alternatively, build libpng in this directory:
-CUSTOMLIBPNG ?= ../libpng
-
-CFLAGSOPT ?= -DNDEBUG -O3 -fstrict-aliasing -ffast-math -funroll-loops -fomit-frame-pointer -ffinite-math-only
-
-CFLAGS ?= -Wall -Wno-unknown-pragmas -I. -I$(CUSTOMLIBPNG) -I/usr/local/include/ -I/usr/include/ -I/usr/X11/include/ $(CFLAGSOPT)
-CFLAGS += -std=c99 $(CFLAGSADD)
-
-LDFLAGS ?= -L$(CUSTOMLIBPNG) -L/usr/local/lib/ -L/usr/lib/ -L/usr/X11/lib/
-LDFLAGS += -lpng -lm $(LDFLAGSADD)
-
-OBJS = pngquant.o rwpng.o pam.o mediancut.o blur.o mempool.o viter.o nearest.o
+OBJS = pngquant.o rwpng.o
 COCOA_OBJS = rwpng_cocoa.o
 
-DISTFILES = $(OBJS:.o=.c) *.[hm] pngquant.1 Makefile README.md INSTALL CHANGELOG COPYRIGHT
+ifeq (1, $(COCOA_READER))
+OBJS += $(COCOA_OBJS)
+endif
+
+STATICLIB = lib/libimagequant.a
+
+DISTFILES = *.[chm] pngquant.1 Makefile configure README.md INSTALL CHANGELOG COPYRIGHT
 TARNAME = pngquant-$(VERSION)
 TARFILE = $(TARNAME)-src.tar.bz2
 
-ifdef USE_COCOA
-CFLAGS += -DUSE_COCOA=1
-OBJS += $(COCOA_OBJS)
-FRAMEWORKS += -framework Cocoa
-endif
+LIBDISTFILES = lib/*.[ch] lib/COPYRIGHT lib/MANUAL.md lib/configure lib/Makefile
 
-BUILD_CONFIGURATION="$(CC) $(CFLAGS) $(LDFLAGS)"
+DLL=libimagequant.dll
+DLLIMP=libimagequant_dll.a
+DLLDEF=libimagequant_dll.def
 
 all: $(BIN)
 
-openmp::
-	$(MAKE) CFLAGSADD=-fopenmp OPENMPFLAGS="-Bstatic -lgomp" -j8 $(MAKEFLAGS)
+$(STATICLIB):: config.mk
+	$(MAKE) -C lib static
 
-$(BIN): $(OBJS)
-	$(CC) $(OBJS) $(LDFLAGS) $(OPENMPFLAGS) $(FRAMEWORKS) -o $@
+$(OBJS): $(wildcard *.h) config.mk
 
 rwpng_cocoa.o: rwpng_cocoa.m
-	clang -c $(CFLAGS) -o $@ $<
+	$(CC) -Wno-enum-conversion -c $(CFLAGS) -o $@ $< || clang -Wno-enum-conversion -c -O3 -o $@ $<
 
-$(OBJS): pam.h rwpng.h build_configuration
-
-install: $(BIN)
-	install -m 0755 -p -D $(BIN) $(DESTDIR)$(BINPREFIX)/$(BIN)
-
-uninstall:
-	rm -f $(DESTDIR)$(BINPREFIX)/$(BIN)
+$(BIN): $(STATICLIB) $(OBJS)
+	$(CC) $(OBJS) $(LDFLAGS) -o $@
 
 dist: $(TARFILE)
 
 $(TARFILE): $(DISTFILES)
 	rm -rf $(TARFILE) $(TARNAME)
-	mkdir $(TARNAME)
+	mkdir -p $(TARNAME)/lib
 	cp $(DISTFILES) $(TARNAME)
+	cp $(LIBDISTFILES) $(TARNAME)/lib
 	tar -cjf $(TARFILE) --numeric-owner --exclude='._*' $(TARNAME)
 	rm -rf $(TARNAME)
-	shasum $(TARFILE)
+	-shasum $(TARFILE)
+
+install: $(BIN)
+	install -m 0755 -p $(BIN) $(BINPREFIX)/$(BIN)
+
+uninstall:
+	rm -f $(BINPREFIX)/$(BIN)
 
 clean:
-	rm -f $(BIN) $(OBJS) $(COCOA_OBJS) $(TARFILE) build_configuration
+	$(MAKE) -C lib clean
+	rm -f $(BIN) $(OBJS) $(COCOA_OBJS) $(STATICLIB) $(TARFILE)
 
-build_configuration::
-	@test -f build_configuration && test $(BUILD_CONFIGURATION) = "`cat build_configuration`" || echo > build_configuration $(BUILD_CONFIGURATION)
+distclean: clean
+	$(MAKE) -C lib distclean
+	rm -f config.mk pngquant-*-src.tar.bz2
 
-.PHONY: all openmp install uninstall dist clean
+config.mk:
+ifeq ($(filter %clean %distclean, $(MAKECMDGOALS)), )
+	./configure
+endif
+
+.PHONY: all clean dist distclean dll install uninstall
 .DELETE_ON_ERROR:
